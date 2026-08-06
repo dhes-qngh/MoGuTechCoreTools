@@ -1,0 +1,8 @@
+﻿欢迎来到博物馆。&Welcome to the museum.
+这是汉代的文物111。&This is a relic from the Han Dynasty.
+这是汉代的文物。&This is a relic from the Han Dynasty.
+请看左侧的展示柜。&Please look at the display case on the left.
+这是汉代的文物。&This is a relic from the Han Dynasty.
+请看左侧的展示柜。&Please look at the display case on the left.
+请看左侧的展示柜111。&Please look at the display case on the left.
+111
