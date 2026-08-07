@@ -3,26 +3,29 @@ using UnityEditor.PackageManager;
 using UnityEngine;
 using UnityEditor.PackageManager.Requests;
 using System.Linq;
+using System.Threading.Tasks;
 
-public static class VersionCheck
+public static class PackageVersionChecker
 {
-    
-    private const string PackageName = "com.mogutech.coretools";
-    
+    private const string PackageName = "com.mogutech.coretools";      // 你的包名
+    private const string GithubRepoUrl = "https://github.com/dhes-qngh/MoGuTechCoreTools"; // 仓库地址
     private const string GithubApiUrl = "https://api.github.com/repos/dhes-qngh/MoGuTechCoreTools/tags";
+
+    private static bool _isUpdating = false; // 防止重复更新
 
     [InitializeOnLoadMethod]
     private static void Initialize()
     {
-        // 编辑器启动或脚本重载后执行检查
         EditorApplication.delayCall += CheckForUpdate;
     }
 
     private static async void CheckForUpdate()
     {
-        // 1. 获取当前安装的包版本
-        var listRequest = Client.List(true); // true表示包括间接依赖的包
-        while (!listRequest.IsCompleted) { await System.Threading.Tasks.Task.Delay(100); }
+        if (_isUpdating) return;
+
+        // 1. 获取当前安装的版本
+        var listRequest = Client.List(true);
+        while (!listRequest.IsCompleted) await Task.Delay(100);
 
         var installedPackage = listRequest.Result.FirstOrDefault(p => p.name == PackageName);
         if (installedPackage == null)
@@ -32,9 +35,9 @@ public static class VersionCheck
         }
 
         string currentVersion = installedPackage.version;
-        Debug.Log($"Current version of {PackageName}: {currentVersion}");
+        Debug.Log($"Current version: {currentVersion}");
 
-        // 2. 从GitHub获取最新版本
+        // 2. 从 GitHub 获取最新版本
         string latestVersion = await GetLatestVersionFromGitHub();
         if (string.IsNullOrEmpty(latestVersion))
         {
@@ -42,33 +45,69 @@ public static class VersionCheck
             return;
         }
 
-        // 3. 比较版本并弹窗提示
-        if (IsNewerVersionAvailable(currentVersion, latestVersion))
+        // 3. 比较版本
+        if (!IsNewerVersionAvailable(currentVersion, latestVersion))
         {
-            bool shouldUpdate = EditorUtility.DisplayDialog(
-                "Package Update Available",
-                $"A new version ({latestVersion}) of '{PackageName}' is available. You are currently on version {currentVersion}. Would you like to update?",
-                "Yes, Update",
-                "No, Thanks"
-            );
+            Debug.Log($"{PackageName} is up to date (v{currentVersion}).");
+            return;
+        }
 
-            if (shouldUpdate)
-            {
-                // 此处可以触发更新逻辑，例如通过 Client.Add 或 Git URL 重新安装
-                Debug.Log($"User chose to update {PackageName} to {latestVersion}.");
-                // 注意: 实际更新通常需要用户通过Package Manager窗口手动操作，
-                // 或者由脚本通过Git URL重新安装（风险较高，需谨慎处理）。
-                // 这里仅作为示例，简单提醒。
-                EditorUtility.DisplayDialog("Update", $"Please update '{PackageName}' manually via the Package Manager Window.", "OK");
-            }
+        // 4. 弹窗询问用户
+        bool shouldUpdate = EditorUtility.DisplayDialog(
+            "核心工具版本过旧",
+            $"'{PackageName}'最新版本({latestVersion}) \n本地版本为{currentVersion}.\n\n请通知负责人员更新",
+            "我就是负责人员",
+            "好的"
+        );
+
+        if (!shouldUpdate)
+        {
+            Debug.Log("负责人员提交后请更新SVN");
+            return;
+        }
+
+        // 5. 执行自动更新
+        _isUpdating = true;
+        await PerformUpdate(latestVersion);
+        _isUpdating = false;
+    }
+
+    private static async Task PerformUpdate(string targetVersion)
+    {
+        // 构造带版本标签的 Git URL（例如 https://github.com/owner/repo.git#v1.2.3）
+        // 注意：GitHub 的 tag 可能带有 "v" 前缀，这里保留原样（Unity 支持）
+        string gitUrlWithTag = $"{GithubRepoUrl}.git#{targetVersion}";
+
+        Debug.Log($"Attempting to update to {targetVersion} via: {gitUrlWithTag}");
+
+        // 发起添加/更新请求
+        var addRequest = Client.Add(gitUrlWithTag);
+        while (!addRequest.IsCompleted) await Task.Delay(100);
+
+        if (addRequest.Status == StatusCode.Success)
+        {
+            Debug.Log($"Successfully updated {PackageName} to version {targetVersion}.");
+            EditorUtility.DisplayDialog(
+                "Update Successful",
+                $"Package '{PackageName}' has been updated to version {targetVersion}.\n\nPlease wait for Unity to recompile.",
+                "OK"
+            );
+            // 可选：建议重启编辑器或刷新 AssetDatabase
+            // AssetDatabase.Refresh();
         }
         else
         {
-            Debug.Log($"{PackageName} is up to date (version {currentVersion}).");
+            string errorMsg = addRequest.Error?.message ?? "Unknown error";
+            Debug.LogError($"Update failed: {errorMsg}");
+            EditorUtility.DisplayDialog(
+                "Update Failed",
+                $"Could not update package: {errorMsg}",
+                "OK"
+            );
         }
     }
 
-    private static async System.Threading.Tasks.Task<string> GetLatestVersionFromGitHub()
+    private static async Task<string> GetLatestVersionFromGitHub()
     {
         using (var client = new System.Net.Http.HttpClient())
         {
@@ -76,54 +115,44 @@ public static class VersionCheck
             try
             {
                 var response = await client.GetAsync(GithubApiUrl);
-                if (response.IsSuccessStatusCode)
+                if (!response.IsSuccessStatusCode)
                 {
-                    var json = await response.Content.ReadAsStringAsync();
-                
-                    // 简单解析：查找第一个 "name":"xxx" 
-                    // 注意：GitHub 返回的 tags 数组第一个元素就是最新 tag
-                    const string nameKey = "\"name\":\"";
-                    int startIndex = json.IndexOf(nameKey);
-                    if (startIndex != -1)
-                    {
-                        startIndex += nameKey.Length;
-                        int endIndex = json.IndexOf('"', startIndex);
-                        if (endIndex != -1)
-                        {
-                            string version = json.Substring(startIndex, endIndex - startIndex);
-                            return version.TrimStart('v'); // 去掉可能的 'v' 前缀
-                        }
-                    }
-                    Debug.LogError("Failed to parse version from GitHub response.");
+                    Debug.LogError($"GitHub API error: {response.StatusCode}");
+                    return null;
                 }
-                else
+
+                string json = await response.Content.ReadAsStringAsync();
+                // 简单解析第一个 "name" 字段（即最新 tag）
+                const string nameKey = "\"name\":\"";
+                int start = json.IndexOf(nameKey);
+                if (start == -1)
                 {
-                    Debug.LogError($"Failed to fetch tags from GitHub: {response.StatusCode}");
+                    Debug.LogError("No tag name found in GitHub response.");
+                    return null;
                 }
+                start += nameKey.Length;
+                int end = json.IndexOf('"', start);
+                if (end == -1) return null;
+
+                string tag = json.Substring(start, end - start);
+                return tag; // 保留原样（可能带 v 前缀）
             }
             catch (System.Exception ex)
             {
-                Debug.LogError($"Error fetching latest version: {ex.Message}");
+                Debug.LogError($"Exception while fetching latest version: {ex.Message}");
+                return null;
             }
-            return null;
         }
     }
 
     private static bool IsNewerVersionAvailable(string current, string latest)
     {
-        // 简单的字符串比较，生产环境建议使用 System.Version 或 SemVer 库
+        // 尝试用 System.Version 比较（支持 "1.2.3" 或 "1.2.3.4"）
         if (System.Version.TryParse(current, out var v1) && System.Version.TryParse(latest, out var v2))
         {
             return v2 > v1;
         }
-        // 如果解析失败，回退到字符串比较
+        // 字符串比较
         return string.Compare(latest, current, System.StringComparison.Ordinal) > 0;
-    }
-
-    // 用于JSON反序列化的辅助类
-    [System.Serializable]
-    private class GitTag
-    {
-        public string name;
     }
 }
