@@ -1,7 +1,7 @@
 {
   "name": "com.mogutech.coretools",
   "displayName": "MoGu Core Tools",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "自定义Shader",
   "unity": "2021.3",
   "author": {
