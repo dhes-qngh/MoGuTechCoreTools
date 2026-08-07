@@ -17,117 +17,51 @@ namespace UnityEditor.Rendering.Universal.ShaderGUI
         private bool eMaskFold = true;
         protected class StStyles       
         {
-            public static readonly GUIContent dissolveTexGUI = new GUIContent ("Dissolve Texture ",
-                "These settings describe the look and feel of the surface itself.");
+            public static readonly GUIContent dissolveTexGUI = new GUIContent ("Dissolve Texture ", "消散贴图");
+            public static readonly GUIContent dissolveTypeGUI = new GUIContent("Dissolve Type", "消散方式");
+            public static readonly GUIContent dissolveColorGUI = new GUIContent("Dissolve Color", "消散描边颜色");
+            public static readonly GUIContent outlineWidthGUI = new GUIContent("Outline Width", "消散描边宽度");
+            public static readonly GUIContent noiseRangeGUI = new GUIContent("Noise Range", "消散噪波范围");
+            public static readonly GUIContent dissolveGUI = new GUIContent("Dissolve", "消散滑块");
+            public static readonly GUIContent invertGUI = new GUIContent("Invert", "反向");
 
-            public static readonly GUIContent dissolveColorGUI = new GUIContent("Dissolve Color",
-                "These settings describe the look and feel of the surface itself.");
+            public static readonly GUIContent albedoFlipGUI = new GUIContent("Albedo Flip Book", "基础贴图翻页");
+            public static readonly GUIContent emissionFlipGUI = new GUIContent("Emission Flip Book", "自发光贴图翻页");
 
-            public static readonly GUIContent noiseRangeGUI = new GUIContent("Noise Range",
-                "These settings describe the look and feel of the surface itself.");
+            public static readonly GUIContent fresnelGUI = new GUIContent("Fresnel", "菲涅尔");
+            public static readonly GUIContent fresnelColorGUI = new GUIContent("Fresnel Color", "菲涅尔颜色");
+            public static readonly GUIContent fresnelPowerGUI = new GUIContent("Fresnel Power", "菲涅尔系数");
+            public static readonly GUIContent fresnelStepGUI = new GUIContent("SmoothStep", "菲涅尔范围");
+            public static readonly GUIContent fresnelMaskGUI = new GUIContent("Mask", "菲涅尔遮罩");
+            public static readonly GUIContent fresnelSliderGUI = new GUIContent("Slider", "滑块");
+            public static readonly GUIContent fresnelFeatherGUI = new GUIContent("Feather", "羽化");
+            public static readonly GUIContent fresnelMoveGUI = new GUIContent("Fresnel Move", "菲涅尔移动");
+            public static readonly GUIContent fresnelNoiseGUI = new GUIContent("Fresnel Noise", "菲涅尔噪波");
+            public static readonly GUIContent fresnelSpeedGUI = new GUIContent("Fresnel Speed", "菲涅尔移动速度");
 
-            public static readonly GUIContent dissolveTypeGUI = new GUIContent("Dissolve Type",
-                "These settings describe the look and feel of the surface itself.");
+            public static readonly GUIContent newAlbedoGUI = new GUIContent("New Albedo", "新基础贴图");
+            public static readonly GUIContent newEmissionGUI = new GUIContent("New Emission", "新自发光贴图");
+            public static readonly GUIContent changeMapGUI = new GUIContent("Change Map", "贴图切换");
+            public static readonly GUIContent newTexMaskGUI = new GUIContent("Mask", "新贴图遮罩");
+            public static readonly GUIContent changeTypeGUI = new GUIContent("Change Type", "新贴图切换方式");
+            public static readonly GUIContent changeGUI = new GUIContent("Change", "切换滑块");
 
-            public static readonly GUIContent albedoFlipGUI = new GUIContent("Albedo Flip Book",
-                "These settings describe the look and feel of the surface itself.");
+            public static readonly GUIContent matCapGUI = new GUIContent("MatCap", "启用材质采样");
+            public static readonly GUIContent matCapTexGUI = new GUIContent("MatCap Texture", "材质采样贴图");
+            public static readonly GUIContent cubeGUI = new GUIContent("Cube", "启用全景球");
+            public static readonly GUIContent cubeMapGUI = new GUIContent("CubeMap", "全景球");
+            public static readonly GUIContent cubeIntGUI = new GUIContent("Intensity", "全景球强度");
+            public static readonly GUIContent cubeMaskGUI = new GUIContent("Mask", "全景球遮罩");
+            public static readonly GUIContent maskTypeGUI = new GUIContent("Mask Type", "全景球混合类型");
 
-            public static readonly GUIContent emissionFlipGUI = new GUIContent("Emission Flip Book",
-                "These settings describe the look and feel of the surface itself.");
+            public static readonly GUIContent changeTexGUI = new GUIContent("Change", "贴图集切换");
+            public static readonly GUIContent nowTexIDGUI = new GUIContent("Now", "当前贴图ID");
+            public static readonly GUIContent nextTexIDGUI = new GUIContent("Next", "下个贴图ID");
+            public static readonly GUIContent lerpSliderGUI = new GUIContent("Lerp", "切换滑块");
+            public static readonly GUIContent texArrayGUI = new GUIContent("Texture Array", "贴图集");
 
-            public static readonly GUIContent outlineWidthGUI = new GUIContent("Outline Width",
-                "These settings describe the look and feel of the surface itself.");
-
-            public static readonly GUIContent fresnelMoveGUI = new GUIContent("Fresnel Move",
-                "These settings describe the look and feel of the surface itself.");
-            
-            public static readonly GUIContent fresnelNoiseGUI = new GUIContent("Fresnel Noise",
-                "These settings describe the look and feel of the surface itself.");
-            
-            public static readonly GUIContent fresnelSpeedGUI = new GUIContent("Fresnel Speed",
-                "These settings describe the look and feel of the surface itself.");
-
-            public static readonly GUIContent changeMapGUI = new GUIContent("Change Map",
-                "These settings describe the look and feel of the surface itself.");
-
-            public static readonly GUIContent newTexMaskGUI = new GUIContent("Mask",
-                "These settings describe the look and feel of the surface itself.");
-
-            public static readonly GUIContent dissolveGUI = new GUIContent("Dissolve",
-                "These settings describe the look and feel of the surface itself.");
-
-            public static readonly GUIContent changeTypeGUI = new GUIContent("Change Type",
-                "These settings describe the look and feel of the surface itself.");
-
-            public static readonly GUIContent changeGUI = new GUIContent("Change",
-                "These settings describe the look and feel of the surface itself.");
-
-            public static readonly GUIContent fresnelColorGUI = new GUIContent("Fresnel Color",
-                "These settings describe the look and feel of the surface itself.");
-
-            public static readonly GUIContent fresnelPowerGUI = new GUIContent("Fresnel Power",
-                "These settings describe the look and feel of the surface itself.");
-
-            public static readonly GUIContent fresnelStepGUI = new GUIContent("SmoothStep",
-                "These settings describe the look and feel of the surface itself.");
-
-            public static readonly GUIContent fresnelMaskGUI = new GUIContent("Mask",
-                "These settings describe the look and feel of the surface itself.");
-
-            public static readonly GUIContent fresnelSliderGUI = new GUIContent("Slider",
-                "These settings describe the look and feel of the surface itself.");
-
-            public static readonly GUIContent fresnelFeatherGUI = new GUIContent("Feather",
-                "These settings describe the look and feel of the surface itself.");
-
-            public static readonly GUIContent fresnelGUI = new GUIContent("Fresnel",
-                "These settings describe the look and feel of the surface itself.");
-
-            public static readonly GUIContent invertGUI = new GUIContent("Invert",
-                "These settings describe the look and feel of the surface itself.");
-
-            public static readonly GUIContent newAlbedoGUI = new GUIContent("New Albedo",
-                "These settings describe the look and feel of the surface itself.");
-
-            public static readonly GUIContent newEmissionGUI = new GUIContent("New Emission",
-                "These settings describe the look and feel of the surface itself.");
-
-            public static readonly GUIContent matCapGUI = new GUIContent("MatCap",
-                "These settings describe the look and feel of the surface itself.");
-
-            public static readonly GUIContent matCapTexGUI = new GUIContent("MatCap Texture",
-                "These settings describe the look and feel of the surface itself.");
-
-            public static readonly GUIContent cubeGUI = new GUIContent("Cube",
-                "These settings describe the look and feel of the surface itself.");
-
-            public static readonly GUIContent cubeMapGUI = new GUIContent("CubeMap",
-                "These settings describe the look and feel of the surface itself.");
-
-            public static readonly GUIContent cubeIntGUI = new GUIContent("Intensity",
-                "These settings describe the look and feel of the surface itself.");
-
-            public static readonly GUIContent cubeMaskGUI = new GUIContent("Mask",
-                "These settings describe the look and feel of the surface itself.");
-
-            public static readonly GUIContent maskTypeGUI = new GUIContent("Mask Type",
-                "These settings describe the look and feel of the surface itself.");
-
-            public static readonly GUIContent changeTexGUI = new GUIContent("Change",
-                "These settings describe the look and feel of the surface itself.");
-            public static readonly GUIContent nowTexIDGUI = new GUIContent("Now",
-                "These settings describe the look and feel of the surface itself.");
-            public static readonly GUIContent nextTexIDGUI = new GUIContent("Next",
-                "These settings describe the look and feel of the surface itself.");
-            public static readonly GUIContent lerpSliderGUI = new GUIContent("Lerp",
-                "These settings describe the look and feel of the surface itself.");
-            public static readonly GUIContent texArrayGUI = new GUIContent("Texture Array",
-                "These settings describe the look and feel of the surface itself.");
-
-            public static readonly GUIContent emaskGUI = new GUIContent("EmissionUseMask",
-                "These settings describe the look and feel of the surface itself.");
-            public static readonly GUIContent emissionMaskGUI = new GUIContent("Emission Mask",
-                "These settings describe the look and feel of the surface itself.");
+            public static readonly GUIContent emaskGUI = new GUIContent("EmissionUseMask", "T自发光遮罩");
+            public static readonly GUIContent emissionMaskGUI = new GUIContent("Emission Mask", "自发光遮罩贴图");
 
             // collect properties from the material properties
         }
