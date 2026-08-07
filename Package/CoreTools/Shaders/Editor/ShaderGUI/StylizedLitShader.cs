@@ -29,9 +29,6 @@ namespace UnityEditor.Rendering.Universal.ShaderGUI
             public static readonly GUIContent dissolveTypeGUI = new GUIContent("Dissolve Type",
                 "These settings describe the look and feel of the surface itself.");
 
-            public static readonly GUIContent useFlipGUI = new GUIContent("Flip Book",
-                "These settings describe the look and feel of the surface itself.");
-
             public static readonly GUIContent albedoFlipGUI = new GUIContent("Albedo Flip Book",
                 "These settings describe the look and feel of the surface itself.");
 
