@@ -9,7 +9,7 @@ public static class VersionCheck
     
     private const string PackageName = "com.mogutech.coretools";
     
-    private const string GithubApiUrl = "https://api.github.com/repos/yourusername/yourrepository/tags";
+    private const string GithubApiUrl = "https://api.github.com/repos/dhes-qngh/MoGuTechCoreTools/tags";
 
     [InitializeOnLoadMethod]
     private static void Initialize()
