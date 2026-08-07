@@ -8,8 +8,9 @@ using System.Threading.Tasks;
 public static class PackageVersionChecker
 {
     private const string PackageName = "com.mogutech.coretools";      // 你的包名
-    private const string GithubRepoUrl = "https://github.com/dhes-qngh/MoGuTechCoreTools"; // 仓库地址
-    private const string GithubApiUrl = "https://api.github.com/repos/dhes-qngh/MoGuTechCoreTools/tags";
+    private const string GithubRepoUrl = "https://github.com/dhes-qngh/MoGuTechCoreTools.git";// 仓库地址
+    private const string PackageSubPath = "/Package"; // 包体子路径
+    private const string GithubApiUrl = "https://api.github.com/repos/dhes-qngh/MoGuTechCoreTools/tags"; // API地址
 
     private static bool _isUpdating = false; // 防止重复更新
 
@@ -55,14 +56,14 @@ public static class PackageVersionChecker
         // 4. 弹窗询问用户
         bool shouldUpdate = EditorUtility.DisplayDialog(
             "核心工具版本过旧",
-            $"'{PackageName}'最新版本({latestVersion}) \n本地版本为{currentVersion}.\n\n请通知负责人员更新",
-            "我就是负责人员",
+            $"最新版本({latestVersion}) \n本地版本为{currentVersion}.\n\n请通知负责人员更新",
+            "我是负责人员",
             "好的"
         );
 
         if (!shouldUpdate)
         {
-            Debug.Log("负责人员提交后请更新SVN");
+            Debug.Log("稍后请从根目录更新SVN");
             return;
         }
 
@@ -74,11 +75,10 @@ public static class PackageVersionChecker
 
     private static async Task PerformUpdate(string targetVersion)
     {
-        // 构造带版本标签的 Git URL（例如 https://github.com/owner/repo.git#v1.2.3）
-        // 注意：GitHub 的 tag 可能带有 "v" 前缀，这里保留原样（Unity 支持）
-        string gitUrlWithTag = $"{GithubRepoUrl}.git#{targetVersion}";
+        // 构造Git URL
+        string gitUrlWithTag = $"{GithubRepoUrl}?path={PackageSubPath}#{targetVersion}";
 
-        Debug.Log($"Attempting to update to {targetVersion} via: {gitUrlWithTag}");
+        Debug.Log($"Updating to {targetVersion} via: {gitUrlWithTag}");
 
         // 发起添加/更新请求
         var addRequest = Client.Add(gitUrlWithTag);
@@ -88,22 +88,32 @@ public static class PackageVersionChecker
         {
             Debug.Log($"Successfully updated {PackageName} to version {targetVersion}.");
             EditorUtility.DisplayDialog(
-                "Update Successful",
-                $"Package '{PackageName}' has been updated to version {targetVersion}.\n\nPlease wait for Unity to recompile.",
+                "升级成功",
+                $"已经升级到版本{targetVersion}.\n\n请等待Unity编译",
                 "OK"
             );
-            // 可选：建议重启编辑器或刷新 AssetDatabase
-            // AssetDatabase.Refresh();
+            AssetDatabase.Refresh();
         }
         else
         {
             string errorMsg = addRequest.Error?.message ?? "Unknown error";
             Debug.LogError($"Update failed: {errorMsg}");
-            EditorUtility.DisplayDialog(
-                "Update Failed",
-                $"Could not update package: {errorMsg}",
-                "OK"
+            bool retry = EditorUtility.DisplayDialog(
+                "升级失败",
+                $"无法升级，请检查网络后重试",
+                "重试",
+                "取消"
             );
+            if (retry)
+            {
+                // 重置 _isUpdating 状态
+                _isUpdating = false; 
+                await PerformUpdate(targetVersion); // 递归重试
+            }
+            else
+            {
+                Debug.Log("User cancelled retry.");
+            }
         }
     }
 
