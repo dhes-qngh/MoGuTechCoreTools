@@ -2,22 +2,30 @@ using UnityEditor;
 using UnityEditor.PackageManager;
 using UnityEngine;
 using UnityEditor.PackageManager.Requests;
+using UnityEngine.Networking;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
 public static class PackageVersionChecker
 {
-    private const string PackageName = "com.mogutech.coretools";      // 你的包名
-    private const string GithubRepoUrl = "https://github.com/dhes-qngh/MoGuTechCoreTools.git";// 仓库地址
-    private const string PackageSubPath = "/Package"; // 包体子路径
-    private const string GithubApiUrl = "https://api.github.com/repos/dhes-qngh/MoGuTechCoreTools/tags"; // API地址
+    private const string PackageName = "com.mogutech.coretools";
+    private const string Owner = "dhes-qngh";
+    private const string Repo = "MoGuTechCoreTools";
+    private static readonly string ReleaseApiUrl = $"https://api.github.com/repos/{Owner}/{Repo}/releases/latest";
 
-    private static bool _isUpdating = false; // 防止重复更新
+    private static bool _isUpdating = false;
 
     [InitializeOnLoadMethod]
     private static void Initialize()
     {
         EditorApplication.delayCall += CheckForUpdate;
+    }
+
+    [MenuItem("Tools/Check for Package Updates")]
+    public static void ManualCheck()
+    {
+        CheckForUpdate();
     }
 
     private static async void CheckForUpdate()
@@ -36,133 +44,339 @@ public static class PackageVersionChecker
         }
 
         string currentVersion = installedPackage.version;
-        Debug.Log($"Current version: {currentVersion}");
+        Debug.Log($"当前安装版本: {currentVersion}");
 
-        // 2. 从 GitHub 获取最新版本
-        string latestVersion = await GetLatestVersionFromGitHub();
-        if (string.IsNullOrEmpty(latestVersion))
+        // 2. 获取远程最新 Release 信息
+        var releaseInfo = await GetLatestReleaseInfo();
+        if (releaseInfo == null)
         {
-            Debug.LogWarning("Could not fetch the latest version from GitHub.");
+            Debug.LogWarning("无法获取最新版本信息。");
             return;
         }
 
-        // 3. 比较版本
+        string latestVersion = releaseInfo.tag_name;
+        string downloadUrl = releaseInfo.download_url;
+
+        if (string.IsNullOrEmpty(downloadUrl))
+        {
+            Debug.LogError("最新 Release 中未找到 .tgz 附件。");
+            return;
+        }
+
+        // 3. 比较版本，如果已最新则退出
         if (!IsNewerVersionAvailable(currentVersion, latestVersion))
         {
-            Debug.Log($"{PackageName} is up to date (v{currentVersion}).");
+            Debug.Log($"{PackageName} 已是最新 (v{currentVersion})。");
             return;
         }
 
-        // 4. 弹窗询问用户
+        // 4. 检查本地 Packages 文件夹是否已有较新的 .tgz 包
+        var localTgzInfo = FindLocalTgzPackage();
+        if (localTgzInfo.path != null && IsNewerOrEqual(localTgzInfo.version, latestVersion))
+        {
+            Debug.Log($"发现本地 tgz 包，版本 {localTgzInfo.version}，直接安装...");
+            _isUpdating = true;
+            await InstallFromLocalTgz(localTgzInfo.path);
+            _isUpdating = false;
+            return;
+        }
+
+        // 5. 没有本地可用 tgz 或版本不够，弹窗询问下载
         bool shouldUpdate = EditorUtility.DisplayDialog(
             "核心工具版本过旧",
-            $"最新版本({latestVersion}) \n本地版本为{currentVersion}.\n\n请通知负责人员更新",
+            $"最新版本 ({latestVersion}) \n本地版本为 {currentVersion}。\n\n是否立即更新？",
             "我是负责人员",
-            "好的"
+            "稍后"
         );
 
         if (!shouldUpdate)
         {
-            Debug.Log("稍后请从根目录更新SVN");
+            Debug.Log("用户取消更新。");
             return;
         }
 
-        // 5. 执行自动更新
+        // 6. 执行下载并安装
         _isUpdating = true;
-        await PerformUpdate(latestVersion);
+        await PerformUpdate(latestVersion, downloadUrl);
         _isUpdating = false;
     }
 
-    private static async Task PerformUpdate(string targetVersion)
+    // ------------------------------------------------------------
+    // 查找本地 .tgz 包
+    // ------------------------------------------------------------
+    private static (string path, string version) FindLocalTgzPackage()
     {
-        // 构造Git URL
-        string gitUrlWithTag = $"{GithubRepoUrl}?path={PackageSubPath}#{targetVersion}";
+        string projectRoot = Directory.GetParent(Application.dataPath).FullName;
+        string packagesFolder = Path.Combine(projectRoot, "Packages");
+        if (!Directory.Exists(packagesFolder)) return default;
 
-        Debug.Log($"Updating to {targetVersion} via: {gitUrlWithTag}");
+        var files = Directory.GetFiles(packagesFolder, $"{PackageName}*.tgz");
+        if (files.Length == 0) return default;
 
-        // 发起更新请求
-        var addRequest = Client.Add(gitUrlWithTag);
+        // 提取版本号（去掉前缀和 .tgz）
+        var versionedFiles = files
+            .Select(f => {
+                string name = Path.GetFileName(f);
+                string versionPart = name.Substring(PackageName.Length + 1); // 去掉 "包名-"
+                if (versionPart.EndsWith(".tgz"))
+                    versionPart = versionPart.Substring(0, versionPart.Length - 4);
+                return (path: f, version: versionPart);
+            })
+            .Where(t => System.Version.TryParse(t.version.TrimStart('v'), out _)) // 只保留合法版本号
+            .ToList();
+
+        if (!versionedFiles.Any()) return default;
+
+        // 取版本号最大的（按 Version 比较）
+        var best = versionedFiles
+            .Select(t => (t.path, version: new System.Version(t.version.TrimStart('v'))))
+            .OrderByDescending(t => t.version)
+            .First();
+
+        return (best.path, best.version.ToString());
+    }
+
+    // 版本比较（>=）
+    private static bool IsNewerOrEqual(string versionA, string versionB)
+    {
+        if (System.Version.TryParse(versionA.TrimStart('v'), out var vA) &&
+            System.Version.TryParse(versionB.TrimStart('v'), out var vB))
+        {
+            return vA >= vB;
+        }
+        return string.Compare(versionA, versionB, System.StringComparison.Ordinal) >= 0;
+    }
+
+    // ------------------------------------------------------------
+    // 从本地 tgz 安装
+    // ------------------------------------------------------------
+    private static async Task InstallFromLocalTgz(string tgzPath)
+    {
+        string fileUrl = $"file:///{tgzPath.Replace('\\', '/')}";
+        Debug.Log($"从本地安装: {fileUrl}");
+
+        var addRequest = Client.Add(fileUrl);
         while (!addRequest.IsCompleted) await Task.Delay(100);
 
         if (addRequest.Status == StatusCode.Success)
         {
-            Debug.Log($"Successfully updated {PackageName} to version {targetVersion}.");
+            Debug.Log($"安装成功: {tgzPath}");
             EditorUtility.DisplayDialog(
                 "升级成功",
-                $"已经升级到版本{targetVersion}.\n\n请等待Unity编译",
+                $"已使用本地包升级。\n\nUnity 将重新编译。\n包路径：{tgzPath}",
                 "OK"
             );
             AssetDatabase.Refresh();
         }
         else
         {
-            string errorMsg = addRequest.Error?.message ?? "Unknown error";
-            Debug.LogError($"Update failed: {errorMsg}");
+            string errorMsg = addRequest.Error?.message ?? "未知错误";
+            Debug.LogError($"安装失败: {errorMsg}");
+            EditorUtility.DisplayDialog(
+                "安装失败",
+                $"从本地 tgz 安装失败：{errorMsg}",
+                "OK"
+            );
+        }
+    }
+
+    // ------------------------------------------------------------
+    // 下载并安装（原有逻辑）
+    // ------------------------------------------------------------
+    private static async Task PerformUpdate(string targetVersion, string downloadUrl)
+    {
+        string projectRoot = Directory.GetParent(Application.dataPath).FullName;
+        string packagesFolder = Path.Combine(projectRoot, "Packages");
+        if (!Directory.Exists(packagesFolder))
+        {
+            Debug.LogError("Packages folder not found!");
+            EditorUtility.DisplayDialog("更新失败", "找不到 Packages 文件夹。", "OK");
+            return;
+        }
+
+        string fileName = $"{PackageName}-{targetVersion}.tgz";
+        string localTgzPath = Path.Combine(packagesFolder, fileName);
+
+        // 下载
+        bool downloadSuccess = await DownloadFileWithProgress(downloadUrl, localTgzPath);
+        if (!downloadSuccess)
+        {
             bool retry = EditorUtility.DisplayDialog(
-                "升级失败",
-                $"无法升级，请检查网络后重试",
+                "下载失败",
+                "无法下载更新包，请检查网络后重试。",
                 "重试",
                 "取消"
             );
             if (retry)
             {
-                // 重置 _isUpdating 状态
-                _isUpdating = false; 
-                await PerformUpdate(targetVersion); // 递归重试
+                await PerformUpdate(targetVersion, downloadUrl);
             }
             else
             {
-                Debug.Log("User cancelled retry.");
+                Debug.Log("用户取消下载重试。");
+            }
+            return;
+        }
+
+        // 安装
+        await InstallFromLocalTgz(localTgzPath);
+    }
+
+    // ------------------------------------------------------------
+    // 下载文件（带进度）
+    // ------------------------------------------------------------
+    private static async Task<bool> DownloadFileWithProgress(string url, string destPath)
+    {
+        using (var request = UnityWebRequest.Get(url))
+        {
+            var operation = request.SendWebRequest();
+
+            while (!operation.isDone)
+            {
+                if (EditorUtility.DisplayCancelableProgressBar(
+                    "正在下载更新包",
+                    $"下载 {Path.GetFileName(destPath)} ...",
+                    request.downloadProgress))
+                {
+                    EditorUtility.ClearProgressBar();
+                    request.Abort();
+                    Debug.Log("用户取消下载。");
+                    return false;
+                }
+                await Task.Delay(100);
+            }
+            EditorUtility.ClearProgressBar();
+
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogError($"下载错误: {request.error}");
+                return false;
+            }
+
+            try
+            {
+                File.WriteAllBytes(destPath, request.downloadHandler.data);
+                Debug.Log($"下载完成: {destPath}");
+                return true;
+            }
+            catch (IOException ex)
+            {
+                Debug.LogError($"写入文件失败: {ex.Message}");
+                return false;
             }
         }
     }
 
-    private static async Task<string> GetLatestVersionFromGitHub()
+    // ------------------------------------------------------------
+    // 获取最新 Release 信息
+    // ------------------------------------------------------------
+    private static async Task<ReleaseInfo> GetLatestReleaseInfo()
     {
-        using (var client = new System.Net.Http.HttpClient())
+        using (var request = UnityWebRequest.Get(ReleaseApiUrl))
         {
-            client.DefaultRequestHeaders.Add("User-Agent", "UnityPackageVersionChecker");
+            request.SetRequestHeader("User-Agent", "UnityPackageUpdater");
+            var operation = request.SendWebRequest();
+            while (!operation.isDone) await Task.Delay(100);
+
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogError($"GitHub API 错误: {request.error}");
+                return null;
+            }
+
             try
             {
-                var response = await client.GetAsync(GithubApiUrl);
-                if (!response.IsSuccessStatusCode)
-                {
-                    Debug.LogError($"GitHub API error: {response.StatusCode}");
-                    return null;
-                }
-
-                string json = await response.Content.ReadAsStringAsync();
-                // 简单解析第一个 "name" 字段（即最新 tag）
-                const string nameKey = "\"name\":\"";
-                int start = json.IndexOf(nameKey);
-                if (start == -1)
-                {
-                    Debug.LogError("No tag name found in GitHub response.");
-                    return null;
-                }
-                start += nameKey.Length;
-                int end = json.IndexOf('"', start);
-                if (end == -1) return null;
-
-                string tag = json.Substring(start, end - start);
-                return tag; // 保留原样（可能带 v 前缀）
+                string json = request.downloadHandler.text;
+                return ParseReleaseJson(json);
             }
             catch (System.Exception ex)
             {
-                Debug.LogError($"Exception while fetching latest version: {ex.Message}");
+                Debug.LogError($"解析 JSON 失败: {ex.Message}");
                 return null;
             }
         }
     }
 
+    private static ReleaseInfo ParseReleaseJson(string json)
+    {
+        string tagName = ExtractJsonString(json, "tag_name");
+        if (string.IsNullOrEmpty(tagName)) return null;
+
+        string downloadUrl = null;
+        const string assetsKey = "\"assets\":[";
+        int assetsStart = json.IndexOf(assetsKey);
+        if (assetsStart != -1)
+        {
+            int assetsEnd = FindMatchingBracket(json, assetsStart + assetsKey.Length - 1);
+            if (assetsEnd != -1)
+            {
+                string assetsJson = json.Substring(assetsStart + assetsKey.Length, assetsEnd - assetsStart - assetsKey.Length);
+                int objStart = assetsJson.IndexOf('{');
+                while (objStart != -1)
+                {
+                    int objEnd = FindMatchingBracket(assetsJson, objStart);
+                    if (objEnd == -1) break;
+                    string assetJson = assetsJson.Substring(objStart, objEnd - objStart + 1);
+                    string name = ExtractJsonString(assetJson, "name");
+                    string url = ExtractJsonString(assetJson, "browser_download_url");
+                    if (!string.IsNullOrEmpty(name) && name.EndsWith(".tgz") && !string.IsNullOrEmpty(url))
+                    {
+                        downloadUrl = url;
+                        break;
+                    }
+                    objStart = assetsJson.IndexOf('{', objEnd + 1);
+                }
+            }
+        }
+
+        if (string.IsNullOrEmpty(downloadUrl))
+        {
+            Debug.LogError("未在 Release 中找到 .tgz 附件。");
+            return null;
+        }
+
+        return new ReleaseInfo { tag_name = tagName, download_url = downloadUrl };
+    }
+
+    private static int FindMatchingBracket(string json, int startIndex)
+    {
+        char open = json[startIndex];
+        char close = open == '{' ? '}' : ']';
+        int depth = 0;
+        for (int i = startIndex; i < json.Length; i++)
+        {
+            if (json[i] == open) depth++;
+            else if (json[i] == close)
+            {
+                depth--;
+                if (depth == 0) return i;
+            }
+        }
+        return -1;
+    }
+
+    private static string ExtractJsonString(string json, string key)
+    {
+        string search = $"\"{key}\":\"";
+        int start = json.IndexOf(search);
+        if (start == -1) return null;
+        start += search.Length;
+        int end = json.IndexOf('"', start);
+        if (end == -1) return null;
+        return json.Substring(start, end - start);
+    }
+
     private static bool IsNewerVersionAvailable(string current, string latest)
     {
-        // 尝试用 System.Version 比较（支持 "1.2.3" 或 "1.2.3.4"）
-        if (System.Version.TryParse(current, out var v1) && System.Version.TryParse(latest, out var v2))
-        {
+        if (System.Version.TryParse(current.TrimStart('v'), out var v1) &&
+            System.Version.TryParse(latest.TrimStart('v'), out var v2))
             return v2 > v1;
-        }
-        // 字符串比较
         return string.Compare(latest, current, System.StringComparison.Ordinal) > 0;
+    }
+
+    private class ReleaseInfo
+    {
+        public string tag_name;
+        public string download_url;
     }
 }
