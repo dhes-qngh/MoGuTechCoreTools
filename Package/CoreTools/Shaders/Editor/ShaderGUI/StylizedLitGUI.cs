@@ -140,6 +140,13 @@ namespace UnityEditor.Rendering.Universal.ShaderGUI
             public MaterialProperty eMask;
             public MaterialProperty emissionMask;
 
+            public MaterialProperty height;
+            public MaterialProperty heightA;
+            public MaterialProperty heightB;
+            public MaterialProperty heightNormal;
+            public MaterialProperty vertexHeight;
+            public MaterialProperty heightSlider;
+            
             // Advanced Props
             public MaterialProperty highlights;
             public MaterialProperty reflections;
@@ -226,6 +233,13 @@ namespace UnityEditor.Rendering.Universal.ShaderGUI
 
                 eMask = BaseShaderGUI.FindProperty("_EMASK", properties, false);
                 emissionMask = BaseShaderGUI.FindProperty("_EmissionMask", properties, false);
+                
+                height = BaseShaderGUI.FindProperty("_HEIGHT", properties, false);
+                heightA =  BaseShaderGUI.FindProperty("_HeightA", properties, false);
+                heightB =  BaseShaderGUI.FindProperty("_HeightB", properties, false);
+                heightNormal = BaseShaderGUI.FindProperty("_HeightNormal", properties, false);
+                vertexHeight = BaseShaderGUI.FindProperty("_VertexHeight", properties, false);
+                heightSlider =  BaseShaderGUI.FindProperty("_HeightSlider", properties, false);
             }
         }
 

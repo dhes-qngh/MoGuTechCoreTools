@@ -80,7 +80,7 @@ public static class PackageVersionChecker
 
         Debug.Log($"Updating to {targetVersion} via: {gitUrlWithTag}");
 
-        // 发起添加/更新请求
+        // 发起更新请求
         var addRequest = Client.Add(gitUrlWithTag);
         while (!addRequest.IsCompleted) await Task.Delay(100);
 

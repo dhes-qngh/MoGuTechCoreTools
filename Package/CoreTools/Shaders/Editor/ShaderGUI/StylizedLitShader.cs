@@ -15,6 +15,7 @@ namespace UnityEditor.Rendering.Universal.ShaderGUI
         private bool matcapFold = true;
         private bool changeTexFold = true;
         private bool eMaskFold = true;
+        private bool heightFold = true;
         protected class StStyles       
         {
             public static readonly GUIContent dissolveTexGUI = new GUIContent ("Dissolve Texture ", "消散贴图");
@@ -60,8 +61,15 @@ namespace UnityEditor.Rendering.Universal.ShaderGUI
             public static readonly GUIContent lerpSliderGUI = new GUIContent("Lerp", "切换滑块");
             public static readonly GUIContent texArrayGUI = new GUIContent("Texture Array", "贴图集");
 
-            public static readonly GUIContent emaskGUI = new GUIContent("EmissionUseMask", "T自发光遮罩");
+            public static readonly GUIContent emaskGUI = new GUIContent("EmissionUseMask", "自发光遮罩");
             public static readonly GUIContent emissionMaskGUI = new GUIContent("Emission Mask", "自发光遮罩贴图");
+            
+            public static readonly GUIContent heightGUI = new GUIContent("Height", "高度图变化");
+            public static readonly GUIContent heightMapAGUI = new GUIContent("Height Map A", "高度图A");
+            public static readonly GUIContent heightMapBGUI = new GUIContent("Height Map B", "高度图B");
+            public static readonly GUIContent heightNormalGUI = new GUIContent("Normal Rescale", "法线强度");
+            public static readonly GUIContent vertexHeightGUI = new GUIContent("Height Scale", "高度缩放");
+            public static readonly GUIContent heightBlendGUI = new GUIContent("Blend", "高度混合");
 
             // collect properties from the material properties
         }
@@ -335,7 +343,27 @@ namespace UnityEditor.Rendering.Universal.ShaderGUI
                 }
                 EditorGUILayout.Space();
             }
-
+            
+            if (material.HasProperty("_HEIGHT"))
+            {
+                heightFold = DrawClickableHelpBox("Height", heightFold);
+                if (heightFold == false)
+                {
+                    materialEditor.ShaderProperty(litProperties.height, StStyles.heightGUI, 0);
+                    if (material.GetFloat("_HEIGHT") > 0)
+                    {
+                        materialEditor.TexturePropertySingleLine(StStyles.heightMapAGUI, litProperties.heightA);
+                        material.SetTexture("_HeightA", litProperties.heightA.textureValue);
+                        materialEditor.TexturePropertySingleLine(StStyles.heightMapBGUI, litProperties.heightB);
+                        material.SetTexture("_HeightB", litProperties.heightB.textureValue);
+                        materialEditor.ShaderProperty(litProperties.heightNormal, StStyles.heightNormalGUI,2);
+                        materialEditor.ShaderProperty(litProperties.vertexHeight, StStyles.vertexHeightGUI, 2);
+                        materialEditor.ShaderProperty(litProperties.heightSlider, StStyles.heightBlendGUI, 2);
+                    }
+                }
+                EditorGUILayout.Space();
+            }
+            
             ValidateMaterial(material);
         }
         private void DrawEmissionTextureProperty()

@@ -85,7 +85,14 @@ Shader "Custom/CustomLit"
         _CubeIntensity("Cube Intensity", Range(0, 1)) = 1
         _CubeMask ("CubeMask", 2D) = "white"{}
         [KeywordEnum(Add,Mul)]_MASKTYPE("MaskType", float) = 0
-
+        
+        [Toggle(_HEIGHT_ON)] _HEIGHT("Height", float) = 0
+        _HeightA("HeightA", 2D) = "black"{}
+        _HeightB("HeightB", 2D) = "black"{}
+        _HeightNormal("HeightNormal",Range(0,50)) = 50
+        _VertexHeight("VertexHeight", Float) = 0.5
+        _HeightSlider("HeightSlider", Range(0,1)) = 0
+        
         // SRP batching compatibility for Clear Coat (Not used in Lit)
         [HideInInspector] _ClearCoatMask("_ClearCoatMask", Float) = 0.0
         [HideInInspector] _ClearCoatSmoothness("_ClearCoatSmoothness", Float) = 0.0
@@ -169,6 +176,7 @@ Shader "Custom/CustomLit"
             #pragma shader_feature_local _MATCAP_ON
             #pragma shader_feature_local _MASKTYPE_ADD _MASKTYPE_MUL
             #pragma shader_feature_local _CUBE_ON
+            #pragma shader_feature_local _HEIGHT_ON
 
             // -------------------------------------
             // Universal Pipeline keywords
@@ -265,6 +273,13 @@ Shader "Custom/CustomLit"
                 samplerCUBE _CubeMap;
                 float _CubeIntensity;
                 sampler2D _CubeMask;
+            #endif
+            #ifdef _HEIGHT_ON
+                sampler2D _HeightA;
+                sampler2D _HeightB;
+                float _VertexHeight;
+                float _HeightSlider;
+                float _HeightNormal;
             #endif
             struct Attributes
             {
@@ -379,6 +394,15 @@ Shader "Custom/CustomLit"
                 return OutMinMax.x + (In - InMinMax.x) * (OutMinMax.y - OutMinMax.x) / (InMinMax.y - InMinMax.x);
             }
             
+            #ifdef _HEIGHT_ON
+                float SampleBlendedHeight(float2 uv)
+                {
+                    float h1 = tex2Dlod(_HeightA, float4(uv,0,0)).r;
+                    float h2 = tex2Dlod(_HeightB, float4(uv,0,0)).r;
+                    return lerp(h1, h2, _HeightSlider) * _VertexHeight;
+                }
+            #endif
+            
             ///////////////////////////////////////////////////////////////////////////////
             //                  Vertex and Fragment functions                            //
             ///////////////////////////////////////////////////////////////////////////////
@@ -391,7 +415,19 @@ Shader "Custom/CustomLit"
                 UNITY_SETUP_INSTANCE_ID(input);
                 UNITY_TRANSFER_INSTANCE_ID(input, output);
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
-
+                #ifdef _HEIGHT_ON
+                    float2 step = 0.01;
+                    float h_center = SampleBlendedHeight(input.texcoord.xy);
+                    input.positionOS.y += h_center;
+                    // 采样四个邻近点计算梯度
+                    float h_x = SampleBlendedHeight(input.texcoord.xy + float2(step.x, 0));
+                    float h_y = SampleBlendedHeight(input.texcoord.xy + float2(0, step.y));
+                    // 计算梯度（切线空间）
+                    float2 gradient = float2(h_x - h_center, h_y - h_center);
+                    gradient *= _HeightNormal;  // 控制凹凸强度
+                    // 构建局部法线（朝上）
+                    input.normalOS = normalize(float3(gradient.x, 1.0, gradient.y));
+                #endif
                 VertexPositionInputs vertexInput = GetVertexPositionInputs(input.positionOS.xyz);
 
                 // normalWS and tangentWS already normalize.
@@ -627,6 +663,7 @@ Shader "Custom/CustomLit"
             #pragma shader_feature_local_fragment _SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A
             #pragma shader_feature_local _DISS_ON
             #pragma shader_feature_local _DISTYPE_TEXTURE
+            #pragma shader_feature_local _HEIGHT_ON
 
             //--------------------------------------
             // GPU Instancing
@@ -676,7 +713,13 @@ Shader "Custom/CustomLit"
                 float4 _DissolveMap_ST;
             #endif
             #endif
-
+            #ifdef _HEIGHT_ON
+                sampler2D _HeightA;
+                sampler2D _HeightB;
+                float _VertexHeight;
+                float _HeightSlider;
+                float _HeightNormal;
+            #endif
             
             float4 GetShadowPositionHClip(Attributes input)
             {
@@ -699,13 +742,23 @@ Shader "Custom/CustomLit"
 
                 return positionCS;
             }
-            
+            #ifdef _HEIGHT_ON
+                float SampleBlendedHeight(float2 uv)
+                {
+                    float h1 = tex2Dlod(_HeightA, float4(uv,0,0)).r;
+                    float h2 = tex2Dlod(_HeightB, float4(uv,0,0)).r;
+                    return lerp(h1, h2, _HeightSlider) * _VertexHeight;
+                }
+            #endif
             Varyings ShadowPassVertex(Attributes input)
             {
                 Varyings output;
                 UNITY_SETUP_INSTANCE_ID(input);
-                
-                
+                #ifdef _HEIGHT_ON
+                    float2 step = 0.01;
+                    float h_center = SampleBlendedHeight(input.texcoord.xy);
+                    input.positionOS.y += h_center;
+                #endif
                 output.uv = TRANSFORM_TEX(input.texcoord, _BaseMap);
                 output.positionCS = GetShadowPositionHClip(input);
                 return output;
