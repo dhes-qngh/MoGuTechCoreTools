@@ -32,7 +32,6 @@ public static class PackageVersionChecker
     {
         if (_isUpdating) return;
 
-        // 1. 获取当前安装的版本
         var listRequest = Client.List(true);
         while (!listRequest.IsCompleted) await Task.Delay(100);
 
@@ -46,7 +45,6 @@ public static class PackageVersionChecker
         string currentVersion = installedPackage.version;
         Debug.Log($"当前安装版本: {currentVersion}");
 
-        // 2. 获取远程最新 Release 信息
         var releaseInfo = await GetLatestReleaseInfo();
         if (releaseInfo == null)
         {
@@ -63,14 +61,12 @@ public static class PackageVersionChecker
             return;
         }
 
-        // 3. 比较版本，如果已最新则退出
         if (!IsNewerVersionAvailable(currentVersion, latestVersion))
         {
             Debug.Log($"{PackageName} 已是最新 (v{currentVersion})。");
             return;
         }
 
-        // 4. 检查本地 Packages 文件夹是否已有较新的 .tgz 包
         var localTgzInfo = FindLocalTgzPackage();
         if (localTgzInfo.path != null && IsNewerOrEqual(localTgzInfo.version, latestVersion))
         {
@@ -81,7 +77,6 @@ public static class PackageVersionChecker
             return;
         }
 
-        // 5. 没有本地可用 tgz 或版本不够，弹窗询问下载
         bool shouldUpdate = EditorUtility.DisplayDialog(
             "核心工具版本过旧",
             $"最新版本 ({latestVersion}) \n本地版本为 {currentVersion}。\n\n是否立即更新？",
@@ -95,7 +90,6 @@ public static class PackageVersionChecker
             return;
         }
 
-        // 6. 执行下载并安装
         _isUpdating = true;
         await PerformUpdate(latestVersion, downloadUrl);
         _isUpdating = false;
@@ -113,21 +107,19 @@ public static class PackageVersionChecker
         var files = Directory.GetFiles(packagesFolder, $"{PackageName}*.tgz");
         if (files.Length == 0) return default;
 
-        // 提取版本号（去掉前缀和 .tgz）
         var versionedFiles = files
             .Select(f => {
                 string name = Path.GetFileName(f);
-                string versionPart = name.Substring(PackageName.Length + 1); // 去掉 "包名-"
+                string versionPart = name.Substring(PackageName.Length + 1);
                 if (versionPart.EndsWith(".tgz"))
                     versionPart = versionPart.Substring(0, versionPart.Length - 4);
                 return (path: f, version: versionPart);
             })
-            .Where(t => System.Version.TryParse(t.version.TrimStart('v'), out _)) // 只保留合法版本号
+            .Where(t => System.Version.TryParse(t.version.TrimStart('v'), out _))
             .ToList();
 
         if (!versionedFiles.Any()) return default;
 
-        // 取版本号最大的（按 Version 比较）
         var best = versionedFiles
             .Select(t => (t.path, version: new System.Version(t.version.TrimStart('v'))))
             .OrderByDescending(t => t.version)
@@ -136,7 +128,9 @@ public static class PackageVersionChecker
         return (best.path, best.version.ToString());
     }
 
+    // ------------------------------------------------------------
     // 版本比较（>=）
+    // ------------------------------------------------------------
     private static bool IsNewerOrEqual(string versionA, string versionB)
     {
         if (System.Version.TryParse(versionA.TrimStart('v'), out var vA) &&
@@ -152,8 +146,8 @@ public static class PackageVersionChecker
     // ------------------------------------------------------------
     private static async Task InstallFromLocalTgz(string tgzPath)
     {
-        // 直接使用绝对路径（不带 file: 协议）
-        string fileUrl = tgzPath.Replace('\\', '/');
+        // 使用 file:/ 格式（两个斜杠）
+        string fileUrl = $"file:/{tgzPath.Replace('\\', '/')}";
         Debug.Log($"从本地安装: {fileUrl}");
 
         var addRequest = Client.Add(fileUrl);
@@ -162,6 +156,9 @@ public static class PackageVersionChecker
         if (addRequest.Status == StatusCode.Success)
         {
             Debug.Log($"安装成功: {tgzPath}");
+            // 安装成功后，清理旧的 tgz 包（保留当前包）
+            CleanOldTgzPackages(tgzPath);
+
             EditorUtility.DisplayDialog(
                 "升级成功",
                 $"已使用本地包升级。\n\nUnity 将重新编译。\n包路径：{tgzPath}",
@@ -182,7 +179,34 @@ public static class PackageVersionChecker
     }
 
     // ------------------------------------------------------------
-    // 下载并安装（原有逻辑）
+    // 清理旧 tgz 包（保留当前）
+    // ------------------------------------------------------------
+    private static void CleanOldTgzPackages(string currentTgzPath)
+    {
+        string projectRoot = Directory.GetParent(Application.dataPath).FullName;
+        string packagesFolder = Path.Combine(projectRoot, "Packages");
+        if (!Directory.Exists(packagesFolder)) return;
+
+        var files = Directory.GetFiles(packagesFolder, $"{PackageName}*.tgz");
+        foreach (var file in files)
+        {
+            // 跳过当前安装的 tgz
+            if (file == currentTgzPath) continue;
+
+            try
+            {
+                File.Delete(file);
+                Debug.Log($"删除旧包: {file}");
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"无法删除旧包 {file}: {ex.Message}");
+            }
+        }
+    }
+
+    // ------------------------------------------------------------
+    // 下载并安装
     // ------------------------------------------------------------
     private static async Task PerformUpdate(string targetVersion, string downloadUrl)
     {
@@ -198,7 +222,6 @@ public static class PackageVersionChecker
         string fileName = $"{PackageName}-{targetVersion}.tgz";
         string localTgzPath = Path.Combine(packagesFolder, fileName);
 
-        // 下载
         bool downloadSuccess = await DownloadFileWithProgress(downloadUrl, localTgzPath);
         if (!downloadSuccess)
         {
@@ -219,7 +242,6 @@ public static class PackageVersionChecker
             return;
         }
 
-        // 安装
         await InstallFromLocalTgz(localTgzPath);
     }
 
