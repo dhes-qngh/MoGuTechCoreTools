@@ -152,7 +152,8 @@ public static class PackageVersionChecker
     // ------------------------------------------------------------
     private static async Task InstallFromLocalTgz(string tgzPath)
     {
-        string fileUrl = $"file:/{tgzPath.Replace('\\', '/')}";
+        // 直接使用绝对路径（不带 file: 协议）
+        string fileUrl = tgzPath.Replace('\\', '/');
         Debug.Log($"从本地安装: {fileUrl}");
 
         var addRequest = Client.Add(fileUrl);
